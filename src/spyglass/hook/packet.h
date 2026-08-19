@@ -32,8 +32,11 @@ struct PacketRecord {
 
 void install_packet_hook();
 
-/** Records a packet on its way out. The write path has no result to inspect, only the type. */
-void note_outbound(const Packet &packet);
+/**
+ * Records a packet on its way out. There is no result to inspect on the write path, only what the
+ * packet put on the wire, which the caller works out by watching the stream grow.
+ */
+void note_outbound(const Packet &packet, const std::uint8_t *body, std::size_t body_size);
 
 /** Every packet read the hook has seen, malformed or not. */
 std::uint64_t packets_observed();

@@ -29,6 +29,7 @@ bool outbound_installed()
 #include <sys/mman.h>
 #include <unistd.h>
 
+#include "bedrock/core/utility/binary_stream.h"
 #include "bedrock/network/packet.h"
 #include "spyglass/core/log.h"
 #include "spyglass/hook/packet.h"
@@ -101,10 +102,23 @@ void *dispatch(void *a0, void *a1, void *a2, void *a3, void *a4, void *a5)
         return nullptr;
     }
 
-    note_outbound(*packet);
+    // Nothing has been written yet, so the only way to the bytes is to note where the stream ends
+    // now and look again once the packet has put itself on it. The stream is the argument after
+    // the packet, and is only believed when it carries a vtable of the client's.
+    const auto *stream = packet == a0 && plausible(a1) && in_client(*reinterpret_cast<void **>(a1))
+                             ? reinterpret_cast<const BinaryStream *>(a1)
+                             : nullptr;
+    const auto *buffer = stream != nullptr && plausible(stream->buffer()) ? stream->buffer() : nullptr;
+    const auto before = buffer != nullptr ? buffer->size() : 0;
 
     auto *original = reinterpret_cast<void *(*)(void *, void *, void *, void *, void *, void *)>(g_originals[vtable]);
-    return original(a0, a1, a2, a3, a4, a5);
+    auto *result = original(a0, a1, a2, a3, a4, a5);
+
+    // A packet written into a shared batch only owns what it added, so the difference is the body.
+    const auto after = buffer != nullptr ? buffer->size() : 0;
+    const auto *body = after > before ? reinterpret_cast<const std::uint8_t *>(buffer->data()) + before : nullptr;
+    note_outbound(*packet, body, body != nullptr ? after - before : 0);
+    return result;
 }
 
 void restore_all()

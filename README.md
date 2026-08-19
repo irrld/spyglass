@@ -120,8 +120,9 @@ into a decoder afterwards. The file is a header and then one record per packet, 
 | `uint8` | 1 when the decode failed |
 | `uint32` | body length, followed by that many bytes |
 
-Sent packets carry no body: the hook runs before the client has written one. Recording is independent of
-`Keep bodies`, which only governs what the overlay holds on to for looking at.
+A sent packet's body is what it added to the stream it was written into, which is not always a stream of its
+own: packets are often written straight into a batch alongside others. Recording is independent of `Keep bodies`,
+which only governs what the overlay holds on to for looking at.
 
 Turn on `Keep bodies` and pick a packet to see its body as one unbroken hex run. `Save hex` writes it out in the
 form a decoder's hex loader wants, for replaying the packet offline.

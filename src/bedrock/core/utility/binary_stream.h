@@ -31,3 +31,16 @@ private:
     bool has_overflowed_{false};   // +64 windows, +56 android
 };
 BEDROCK_STATIC_ASSERT_SIZE(ReadOnlyBinaryStream, 72, 64);
+
+/**
+ * What a packet is written into. Everything written lands on the end of the buffer it points at,
+ * which is not always its own: a packet is often written straight into a batch alongside others.
+ */
+class BinaryStream : public ReadOnlyBinaryStream {
+public:
+    [[nodiscard]] const std::string *buffer() const { return buffer_; }
+
+private:
+    std::string *buffer_{nullptr};  // +72 windows, +64 android
+};
+BEDROCK_STATIC_ASSERT_SIZE(BinaryStream, 80, 72);

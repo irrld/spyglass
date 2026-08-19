@@ -111,18 +111,12 @@ std::array<BodyEntry, kBodyLimit> g_bodies;
 std::size_t g_body_written = 0;
 std::size_t g_body_bytes = 0;
 
-void capture(const std::uint64_t sequence, const ReadOnlyBinaryStream &stream, const std::size_t body_begin)
+void capture(const std::uint64_t sequence, const std::uint8_t *begin, const std::size_t body_size)
 {
-    if (g_body_hold.load(std::memory_order_relaxed)) {
+    if (g_body_hold.load(std::memory_order_relaxed) || begin == nullptr || body_size == 0) {
         return;
     }
-
-    const auto view = stream.getView();
-    if (view.data() == nullptr || view.size() <= body_begin) {
-        return;
-    }
-    const auto *begin = reinterpret_cast<const std::uint8_t *>(view.data()) + body_begin;
-    const auto size = std::min(view.size() - body_begin, kBodyBytes);
+    const auto size = std::min(body_size, kBodyBytes);
 
     const std::lock_guard lock{g_body_mutex};
     auto &slot = g_bodies[g_body_written % kBodyLimit];
@@ -173,7 +167,7 @@ void record(const Packet &packet, const ReadOnlyBinaryStream &stream, const std:
                            ? reinterpret_cast<const std::uint8_t *>(view.data()) + body_begin
                            : nullptr;
     if (g_capture_bodies.load(std::memory_order_relaxed)) {
-        capture(entry.sequence, stream, body_begin);
+        capture(entry.sequence, body, entry.body_size);
     }
     append(entry, body, entry.body_size);
 
@@ -273,14 +267,14 @@ void install_packet_hook()
                                    reinterpret_cast<void **>(&g_read_no_header)};
 }
 
-void note_outbound(const Packet &packet)
+void note_outbound(const Packet &packet, const std::uint8_t *body, const std::size_t body_size)
 {
     count(packet);
 
     const RecentEntry entry{
         .sequence = g_observed.fetch_add(1, std::memory_order_relaxed) + 1,
         .id = static_cast<std::int32_t>(packet.getId()),
-        .body_size = 0,
+        .body_size = static_cast<std::uint32_t>(body_size),
         .unread = 0,
         .at = elapsed_ms(),
         .thread = current_thread(),
@@ -288,7 +282,10 @@ void note_outbound(const Packet &packet)
         .outbound = true,
     };
 
-    append(entry, nullptr, 0);
+    if (g_capture_bodies.load(std::memory_order_relaxed)) {
+        capture(entry.sequence, body, body_size);
+    }
+    append(entry, body, body_size);
 
     const std::lock_guard lock{g_recent_mutex};
     g_recent[g_recent_written % kRecentLimit] = entry;

@@ -204,8 +204,7 @@ void View::draw_recent()
             }
 
             ImGui::TableNextColumn();
-            // Nothing has been written into an outgoing packet's stream yet, so it has no size.
-            if (entry.outbound) {
+            if (entry.body_size == 0) {
                 ImGui::TextColored(kMuted, "-");
             }
             else {
